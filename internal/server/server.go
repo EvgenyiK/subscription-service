@@ -9,13 +9,18 @@ import (
 func NewRouter(h *handlers.Handler) *mux.Router {
 	r := mux.NewRouter()
 
-	r.HandleFunc("/subscriptions", h.CreateSubscription).Methods("POST")
-	r.HandleFunc("/subscriptions/{id}", h.GetSubscription).Methods("GET")
-	r.HandleFunc("/subscriptions/{id}", h.UpdateSubscription).Methods("PUT")
-	r.HandleFunc("/subscriptions/{id}", h.DeleteSubscription).Methods("DELETE")
-	r.HandleFunc("/subscriptions", h.ListSubscriptions).Methods("GET") // с фильтрами
+	// Группировка маршрутов по пути "/subscriptions"
+	subsRouter := r.PathPrefix("/subscriptions").Subrouter()
 
-	r.HandleFunc("/subscriptions/total", h.GetTotalCost).Methods("GET") // подсчет стоимости
+	// Маршруты для просмотра и подсчета
+	subsRouter.HandleFunc("/view/list", h.ListSubscriptions).Methods("GET")
+	subsRouter.HandleFunc("/view/total/{date}", h.GetTotalCost).Methods("GET")
+
+	// CRUD операции для подписок
+	subsRouter.HandleFunc("", h.CreateSubscription).Methods("POST")
+	subsRouter.HandleFunc("/{id:[0-9a-fA-F-]{36}}", h.GetSubscription).Methods("GET")
+	subsRouter.HandleFunc("/{id:[0-9a-fA-F-]{36}}", h.UpdateSubscription).Methods("PUT")
+	subsRouter.HandleFunc("/{id:[0-9a-fA-F-]{36}}", h.DeleteSubscription).Methods("DELETE")
 
 	return r
 }

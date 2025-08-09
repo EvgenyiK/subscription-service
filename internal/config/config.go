@@ -26,5 +26,6 @@ func LoadConfig() (*Config, error) {
 		DBName:     viper.GetString("DB_NAME"),
 		ServerPort: viper.GetString("SERVER_PORT"),
 	}
+
 	return config, nil
 }

@@ -7,7 +7,8 @@ import (
 	"github.com/EvgenyiK/subscription-service/internal/models"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v4/pgxpool"
-	"log"
+	"strconv"
+	"time"
 )
 
 type Repository struct {
@@ -47,7 +48,7 @@ func (r *Repository) Create(ctx context.Context, sub *models.Subscription) error
 
 // GetByID возвращает подписку по ID
 func (r *Repository) GetByID(ctx context.Context, id uuid.UUID) (*models.Subscription, error) {
-	query := `SELECT id, service_name, price, user_id, start_date, end_date FROM subscriptions WHERE id=$1`
+	query := `SELECT id, service_name, price, user_id, start_date, end_date FROM subscriptions WHERE user_id=$1`
 	row := r.db.QueryRow(ctx, query, id)
 
 	var sub models.Subscription
@@ -73,10 +74,9 @@ func (r *Repository) Update(ctx context.Context, sub *models.Subscription) error
         UPDATE subscriptions SET 
             service_name=$2,
             price=$3,
-            user_id=$4,
             start_date=$5,
             end_date=$6
-        WHERE id=$1`
+        WHERE user_id=$4`
 
 	// Передача NULL для end_date если EndDate == nil
 	cmdTag, err := r.db.Exec(ctx, query,
@@ -97,8 +97,8 @@ func (r *Repository) Update(ctx context.Context, sub *models.Subscription) error
 }
 
 // Delete удаляет подписку по ID
-func (r *Repository) Delete(ctx context.Context, id uuid.UUID) error {
-	cmdTag, err := r.db.Exec(ctx, `DELETE FROM subscriptions WHERE id=$1`, id)
+func (r *Repository) Delete(ctx context.Context, user_id uuid.UUID) error {
+	cmdTag, err := r.db.Exec(ctx, `DELETE FROM subscriptions WHERE user_id=$1`, user_id)
 	if err != nil {
 		return err
 	}
@@ -108,76 +108,49 @@ func (r *Repository) Delete(ctx context.Context, id uuid.UUID) error {
 	return nil
 }
 
-func (r *Repository) List(ctx context.Context, filter models.SubscriptionFilters) ([]models.Subscription, error) {
-	query := `SELECT id, service_name, price, user_id, start_date FROM subscriptions WHERE 1=1`
-	args := []interface{}{}
-	argIdx := 1
-
-	if filter.UserID != nil {
-		query += fmt.Sprintf(" AND user_id=$%d", argIdx)
-		args = append(args, *filter.UserID)
-		argIdx++
-	}
-
-	rows, err := r.db.Query(ctx, query, args...)
+func (r *Repository) GetAllSubscriptions(ctx context.Context) ([]models.Subscription, error) {
+	rows, err := r.db.Query(ctx, "SELECT id, service_name, price, user_id, start_date, end_date FROM subscriptions")
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
 	var subs []models.Subscription
-
 	for rows.Next() {
-		var sub models.Subscription
-
-		if err := rows.Scan(
-			&sub.ID,
-			&sub.ServiceName,
-			&sub.Price,
-			&sub.UserID,
-			&sub.StartDate,
-			&sub.EndDate,
-		); err != nil {
+		var s models.Subscription
+		err := rows.Scan(&s.ID, &s.ServiceName, &s.Price, &s.UserID, &s.StartDate, &s.EndDate)
+		if err != nil {
 			return nil, err
 		}
-
-		// Добавляем подписку в список
-		subs = append(subs, sub)
+		subs = append(subs, s)
 	}
-
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-
 	return subs, nil
 }
 
-func (r *Repository) GetSubscriptionsSummary(ctx context.Context, filters models.SubscriptionFilters) (totalCost float64, count int, err error) {
-	baseQuery := `SELECT COALESCE(SUM(price), 0), COUNT(*) FROM subscriptions WHERE 1=1`
-	args := []interface{}{}
-	i := 1
+func (r *Repository) GetTotalSubscriptionCost(ctx context.Context, date time.Time, filterByUser bool, userID uuid.UUID, serviceName string) (int, error) {
+	query := `
+		SELECT COALESCE(SUM(price), 0)
+		FROM subscriptions
+		WHERE start_date <= TO_DATE($1, 'YYYY-MM-DD') AND end_date >= TO_DATE($1, 'YYYY-MM-DD')`
 
-	if filters.UserID != nil {
-		baseQuery += fmt.Sprintf(" AND user_id=$%d", i)
-		args = append(args, *filters.UserID)
-		i++
+	var args []interface{}
+	args = append(args, date)
+
+	argPos := 2 // позиция следующего аргумента
+
+	if filterByUser {
+		query += " AND user_id = $" + strconv.Itoa(argPos)
+		args = append(args, userID)
+		argPos++
 	}
 
-	if filters.ServiceName != "" {
-		baseQuery += fmt.Sprintf(" AND service_name ILIKE $%d", i)
-		args = append(args, "%"+filters.ServiceName+"%")
-		i++
+	if serviceName != "" {
+		query += " AND service_name = $" + strconv.Itoa(argPos)
+		args = append(args, serviceName)
 	}
 
-	if filters.StartDate != nil && filters.EndDate != nil {
-		baseQuery += fmt.Sprintf(` AND start_date <= $%d AND (end_date >= $%d OR end_date IS NULL)`, i, i+1)
-		args = append(args, *filters.EndDate)
-		args = append(args, *filters.StartDate)
-	}
-
-	err = r.db.QueryRow(ctx, baseQuery, args...).Scan(&totalCost, &count)
-	if err != nil {
-		log.Printf("Ошибка при выполнении запроса: %v", err)
-	}
-	return
+	var total int
+	err := r.db.QueryRow(ctx, query, args...).Scan(&total)
+	fmt.Println(err)
+	return total, err
 }

@@ -13,10 +13,3 @@ type Subscription struct {
 	StartDate   time.Time  `json:"start_date"`         // месяц и год, например 07-2025
 	EndDate     *time.Time `json:"end_date,omitempty"` // опционально
 }
-
-type SubscriptionFilters struct {
-	UserID      *int64
-	ServiceName string
-	StartDate   *time.Time
-	EndDate     *time.Time
-}

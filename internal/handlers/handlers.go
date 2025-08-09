@@ -9,7 +9,6 @@ import (
 	"github.com/EvgenyiK/subscription-service/internal/repository"
 	"github.com/gorilla/mux"
 	"net/http"
-	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -18,7 +17,6 @@ import (
 
 const (
 	dateFormatStart = "01-2006"
-	dateFormatQuery = "2006-01-02"
 )
 
 type Handler struct {
@@ -116,14 +114,14 @@ func (h *Handler) UpdateSubscription(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	idStr := vars["id"]
 
-	subscriptionID, err := parseUUID(idStr)
+	userUUID, err := parseUUID(idStr)
 	if err != nil {
 		respondWithError(w, http.StatusBadRequest, "Invalid subscription ID format")
 		return
 	}
 
 	// Получаем существующую подписку
-	subscription, err := h.repo.GetByID(r.Context(), subscriptionID)
+	subscription, err := h.repo.GetByID(r.Context(), userUUID)
 	if err != nil {
 		respondWithError(w, http.StatusNotFound, "Subscription not found")
 		return
@@ -165,14 +163,14 @@ func (h *Handler) DeleteSubscription(w http.ResponseWriter, r *http.Request) {
 	idStr := vars["id"]
 
 	// Парсинг UUID
-	subscriptionID, err := parseUUID(idStr)
+	userUUID, err := parseUUID(idStr)
 	if err != nil {
 		respondWithError(w, http.StatusBadRequest, "Invalid subscription ID format")
 		return
 	}
 
 	// Вызов метода удаления
-	err = h.repo.Delete(r.Context(), subscriptionID)
+	err = h.repo.Delete(r.Context(), userUUID)
 	if err != nil {
 		// Можно уточнить ошибку: если не найден — 404, иначе 500
 		if errors.Is(err, sql.ErrNoRows) {
@@ -188,111 +186,58 @@ func (h *Handler) DeleteSubscription(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) ListSubscriptions(w http.ResponseWriter, r *http.Request) {
-	// Получение query-параметров
-	queryParams := r.URL.Query()
-
-	var filter models.SubscriptionFilters
-
-	// Получение user_id из query-параметра
-	if userIDStr := queryParams.Get("user_id"); userIDStr != "" {
-		userIDInt, err := strconv.ParseInt(userIDStr, 10, 64)
-		if err != nil {
-			respondWithError(w, http.StatusBadRequest, "Invalid user_id parameter")
-			return
-		}
-		filter.UserID = &userIDInt
-	}
-
-	// Можно добавить другие фильтры по необходимости
-
-	// Вызов метода репозитория
-	subscriptions, err := h.repo.List(r.Context(), filter)
+	// Просто получаем все подписки без фильтров
+	subscriptions, err := h.repo.GetAllSubscriptions(r.Context())
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Failed to fetch subscriptions")
+		respondWithError(w, http.StatusInternalServerError, "Error fetching subscriptions: "+err.Error())
 		return
 	}
 
-	// Отправка ответа
+	// Отправляем результат в формате JSON
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(subscriptions); err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Failed to encode response")
-		return
-	}
+	json.NewEncoder(w).Encode(subscriptions)
 }
 
-func (h *Handler) GetTotalCost(w http.ResponseWriter, req *http.Request) {
-	ctx := req.Context()
+// GetTotalCost подсчитывает сумму подписок за выбранный период
+func (h *Handler) GetTotalCost(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	dateStr := vars["date"] // например, "2023-10-15"
 
-	query := req.URL.Query()
-
-	var (
-		userIDStr    = query.Get("user_id")
-		serviceName  = query.Get("service_name")
-		startDateStr = query.Get("start_date")
-		endDateStr   = query.Get("end_date")
-	)
-
-	var (
-		userID    *int64
-		startDate *time.Time
-		endDate   *time.Time
-		err       error
-	)
-
-	if userIDStr != "" {
-		idVal, err := strconv.ParseInt(userIDStr, 10, 64)
-		if err != nil {
-			respondWithError(w, http.StatusBadRequest, "Invalid user_id")
-			return
-		}
-		userID = &idVal
-	}
-
-	if startDateStr != "" {
-		t, err := time.Parse("2006-01-02", startDateStr)
-		if err != nil {
-			respondWithError(w, http.StatusBadRequest, "Invalid start_date format. Use YYYY-MM-DD")
-			return
-		}
-		startDate = &t
-	}
-
-	if endDateStr != "" {
-		t, err := time.Parse("2006-01-02", endDateStr)
-		if err != nil {
-			respondWithError(w, http.StatusBadRequest, "Invalid end_date format. Use YYYY-MM-DD")
-			return
-		}
-		endDate = &t
-	} else {
-		now := time.Now()
-		endDate = &now
-	}
-
-	filters := models.SubscriptionFilters{
-		UserID:      userID,
-		ServiceName: serviceName,
-		StartDate:   startDate,
-		EndDate:     endDate,
-	}
-
-	totalCost, count, err := h.repo.GetSubscriptionsSummary(ctx, filters)
+	// Парсим дату
+	date, err := time.Parse("2006-01-02", dateStr)
 	if err != nil {
-		respondWithError(w, http.StatusInternalServerError, "Database error: "+err.Error())
+		respondWithError(w, http.StatusBadRequest, "Invalid date format")
 		return
 	}
 
-	resp := map[string]interface{}{
-		"total_cost": totalCost,
-		"count":      count,
-		"filters": map[string]interface{}{
-			"user_id":      userIDStr,
-			"service_name": serviceName,
-			"start_date":   startDateStr,
-			"end_date":     endDateStr,
-		},
+	// Получаем фильтры из query-параметров
+	userIDStr := r.URL.Query().Get("user_id")
+	serviceName := r.URL.Query().Get("service_name")
+
+	var userUUID uuid.UUID
+	var filterByUser bool
+
+	if userIDStr != "" {
+		userUUID, err = parseUUID(userIDStr)
+		if err != nil {
+			respondWithError(w, http.StatusBadRequest, "Invalid subscription ID format")
+			return
+		}
+		filterByUser = true
 	}
 
+	// Вызов вашей функции подсчета
+	totalCost, err := h.repo.GetTotalSubscriptionCost(r.Context(), date, filterByUser, userUUID, serviceName)
+	if err != nil {
+		http.Error(w, "Error calculating total cost", http.StatusInternalServerError)
+		return
+	}
+
+	// Отправляем ответ в JSON
+	resp := map[string]interface{}{
+		"date":  dateStr,
+		"total": totalCost,
+	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(resp)
 }
