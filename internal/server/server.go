@@ -2,6 +2,7 @@ package server
 
 import (
 	"github.com/EvgenyiK/subscription-service/internal/handlers"
+	httpSwagger "github.com/swaggo/http-swagger"
 
 	"github.com/gorilla/mux"
 )
@@ -21,6 +22,8 @@ func NewRouter(h *handlers.Handler) *mux.Router {
 	subsRouter.HandleFunc("/{id:[0-9a-fA-F-]{36}}", h.GetSubscription).Methods("GET")
 	subsRouter.HandleFunc("/{id:[0-9a-fA-F-]{36}}", h.UpdateSubscription).Methods("PUT")
 	subsRouter.HandleFunc("/{id:[0-9a-fA-F-]{36}}", h.DeleteSubscription).Methods("DELETE")
+
+	subsRouter.PathPrefix("/swagger/").Handler(httpSwagger.WrapHandler)
 
 	return r
 }

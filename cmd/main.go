@@ -1,16 +1,21 @@
 package main
 
 import (
+	_ "github.com/EvgenyiK/subscription-service/cmd/docs"
 	"github.com/EvgenyiK/subscription-service/internal/handlers"
 	"log"
 	"net/http"
 
-	"github.com/joho/godotenv"
-
 	"github.com/EvgenyiK/subscription-service/internal/config"
 	"github.com/EvgenyiK/subscription-service/internal/repository"
 	"github.com/EvgenyiK/subscription-service/internal/server"
+	"github.com/joho/godotenv"
 )
+
+// @title Subscription Service API
+// @version 1.0
+// @description API для управления подписками.
+// @host localhost:8080
 
 func main() {
 	err := godotenv.Load()

@@ -27,6 +27,17 @@ func NewHandler(repo *repository.Repository) *Handler {
 	return &Handler{repo: repo}
 }
 
+// CreateSubscription godoc
+// @Summary Создать новую подписку
+// @Description Создает новую подписку с указанными параметрами.
+// @Tags subscriptions
+// @Accept json
+// @Produce json
+// @Param subscription body models.CreateSubscriptionInput true "Данные подписки"
+// @Success 201 {object} models.Subscription
+// @Failure 400 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /subscriptions [post]
 func (h *Handler) CreateSubscription(w http.ResponseWriter, r *http.Request) {
 	var input struct {
 		ServiceName string  `json:"service_name"`
@@ -90,6 +101,17 @@ func (h *Handler) CreateSubscription(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(sub)
 }
 
+// GetSubscription godoc
+// @Summary Вернуть подписку по ID
+// @Description Возвращает подписку по id пользователя.
+// @Tags subscriptions
+// @Accept json
+// @Produce json
+// @Param id path string true "ID пользователя (UUID)"
+// @Success 201 {object} models.Subscription
+// @Failure 400 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /subscriptions/{id} [get]
 func (h *Handler) GetSubscription(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	idStr := vars["id"]
@@ -110,6 +132,19 @@ func (h *Handler) GetSubscription(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(subscription)
 }
 
+// UpdateSubscription godoc
+// @Summary Обновить подписку по ID
+// @Description Обновляет информацию о подписке по заданному ID.
+// @Tags subscriptions
+// @Accept json
+// @Produce json
+// @Param id path string true "ID пользователя (UUID)"
+// @Param subscription body models.UpdateSubscriptionInput true "Данные для обновления подписки"
+// @Success 200 {object} models.Subscription
+// @Failure 400 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /subscriptions/{id} [put]
 func (h *Handler) UpdateSubscription(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	idStr := vars["id"]
@@ -157,6 +192,18 @@ func (h *Handler) UpdateSubscription(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(subscription)
 }
 
+// DeleteSubscription godoc
+// @Summary Удаляет подписку по ID
+// @Description Удаляет подписку по ID пользователя
+// @Tags subscriptions
+// @Accept json
+// @Produce json
+// @Param id path string true "ID пользователя (UUID)"
+// @Success 204 {string} string "No Content"
+// @Failure 400 {object} map[string]string
+// @Failure 404 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /subscriptions/{id} [delete]
 func (h *Handler) DeleteSubscription(w http.ResponseWriter, r *http.Request) {
 	// Получение переменной из URL
 	vars := mux.Vars(r)
@@ -185,6 +232,15 @@ func (h *Handler) DeleteSubscription(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// ListSubscriptions godoc
+// @Summary Получить список всех подписок
+// @Description Возвращает список всех подписок без фильтров
+// @Tags subscriptions
+// @Accept json
+// @Produce json
+// @Success 200 {array} models.Subscription
+// @Failure 500 {object} map[string]string
+// @Router /subscriptions/view/list [get]
 func (h *Handler) ListSubscriptions(w http.ResponseWriter, r *http.Request) {
 	// Просто получаем все подписки без фильтров
 	subscriptions, err := h.repo.GetAllSubscriptions(r.Context())
@@ -198,7 +254,19 @@ func (h *Handler) ListSubscriptions(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(subscriptions)
 }
 
-// GetTotalCost подсчитывает сумму подписок за выбранный период
+// GetTotalCost godoc
+// @Summary Подсчитывает общую стоимость подписок за выбранную дату
+// @Description Возвращает сумму подписок за указанную дату с возможностью фильтрации по пользователю и сервису
+// @Tags subscriptions
+// @Accept json
+// @Produce json
+// @Param date path string true "Дата в формате YYYY-MM-DD"
+// @Param user_id query string false "ID пользователя (UUID)"
+// @Param service_name query string false "Название сервиса"
+// @Success 200 {object} map[string]interface{}
+// @Failure 400 {object} map[string]string
+// @Failure 500 {object} map[string]string
+// @Router /subscriptions/view/total/{date} [get]
 func (h *Handler) GetTotalCost(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	dateStr := vars["date"] // например, "2023-10-15"
