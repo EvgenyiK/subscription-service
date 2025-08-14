@@ -5,9 +5,10 @@ import (
 	"fmt"
 	"github.com/EvgenyiK/subscription-service/internal/config"
 	"github.com/EvgenyiK/subscription-service/internal/models"
+	"github.com/Masterminds/squirrel"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v4/pgxpool"
-	"strconv"
+	"log"
 	"time"
 )
 
@@ -28,32 +29,43 @@ func NewRepository(cfg *config.Config) (*Repository, error) {
 	return &Repository{db: pool}, nil
 }
 
-// Create добавляет новую подписку в базу данных
+// Create добавляет новую подписку в базу данных с помощью Squirrel
 func (r *Repository) Create(ctx context.Context, sub *models.Subscription) error {
-	query := `
-        INSERT INTO subscriptions (id, service_name, price, user_id, start_date, end_date)
-        VALUES ($1, $2, $3, $4, $5, $6)
-    `
+	queryBuilder := squirrel.Insert("subscriptions").
+		Columns("id", "service_name", "price", "user_id", "start_date", "end_date").
+		Values(sub.ID, sub.ServiceName, sub.Price, sub.UserID, sub.StartDate, sub.EndDate).
+		PlaceholderFormat(squirrel.Dollar)
 
-	_, err := r.db.Exec(ctx, query,
-		sub.ID,
-		sub.ServiceName,
-		sub.Price,
-		sub.UserID,
-		sub.StartDate,
-		sub.EndDate,
-	)
+	sqlStr, args, err := queryBuilder.ToSql()
+	if err != nil {
+		log.Printf("Create: ошибка формирования SQL: %v", err)
+		return err
+	}
+
+	log.Printf("Create: выполняется SQL: %s с аргументами: %v", sqlStr, args)
+
+	_, err = r.db.Exec(ctx, sqlStr, args...)
 	return err
 }
 
-// GetByID возвращает подписку по ID
+// GetByID возвращает подписку по user_id
 func (r *Repository) GetByID(ctx context.Context, id uuid.UUID) (*models.Subscription, error) {
-	query := `SELECT id, service_name, price, user_id, start_date, end_date FROM subscriptions WHERE user_id=$1`
-	row := r.db.QueryRow(ctx, query, id)
+	queryBuilder := squirrel.Select("id", "service_name", "price", "user_id", "start_date", "end_date").
+		From("subscriptions").
+		Where(squirrel.Eq{"user_id": id}).PlaceholderFormat(squirrel.Dollar)
+
+	sqlStr, args, err := queryBuilder.ToSql()
+	if err != nil {
+		log.Printf("GetByID: ошибка формирования SQL: %v", err)
+		return nil, err
+	}
+
+	log.Printf("GetByID: выполняется SQL: %s с аргументами: %v", sqlStr, args)
 
 	var sub models.Subscription
 
-	err := row.Scan(
+	row := r.db.QueryRow(ctx, sqlStr, args...)
+	err = row.Scan(
 		&sub.ID,
 		&sub.ServiceName,
 		&sub.Price,
@@ -62,55 +74,88 @@ func (r *Repository) GetByID(ctx context.Context, id uuid.UUID) (*models.Subscri
 		&sub.EndDate,
 	)
 	if err != nil {
+		log.Printf("GetByID: ошибка при сканировании результата: %v", err)
 		return nil, err
 	}
 
+	log.Printf("GetByID: успешно получена подписка с ID: %s", sub.ID)
 	return &sub, nil
 }
 
 // Update обновляет существующую подписку
 func (r *Repository) Update(ctx context.Context, sub *models.Subscription) error {
-	query := `
-        UPDATE subscriptions SET 
-            service_name=$2,
-            price=$3,
-            start_date=$5,
-            end_date=$6
-        WHERE user_id=$4`
+	queryBuilder := squirrel.Update("subscriptions").
+		Set("service_name", sub.ServiceName).
+		Set("price", sub.Price).
+		Set("start_date", sub.StartDate).
+		Set("end_date", sub.EndDate).
+		Where(squirrel.Eq{"user_id": sub.UserID}).PlaceholderFormat(squirrel.Dollar)
 
-	// Передача NULL для end_date если EndDate == nil
-	cmdTag, err := r.db.Exec(ctx, query,
-		// Порядок аргументов должен соответствовать порядку в запросе
-		sub.ServiceName,
-		sub.Price,
-		sub.UserID,
-		sub.StartDate,
-		sub.EndDate,
-	)
+	sqlStr, args, err := queryBuilder.ToSql()
 	if err != nil {
+		log.Printf("Update: ошибка формирования SQL: %v", err)
+		return err
+	}
+
+	log.Printf("Update: выполняется SQL: %s с аргументами: %v", sqlStr, args)
+
+	cmdTag, err := r.db.Exec(ctx, sqlStr, args...)
+	if err != nil {
+		log.Printf("Update: ошибка выполнения SQL: %v", err)
 		return err
 	}
 	if cmdTag.RowsAffected() != 1 {
+		log.Printf("Update: строк не обновлено (RowsAffected=%d)", cmdTag.RowsAffected())
 		return fmt.Errorf("no rows affected")
 	}
+
+	log.Printf("Update: успешно обновлена подписка для user_id=%s", sub.UserID)
 	return nil
 }
 
 // Delete удаляет подписку по ID
-func (r *Repository) Delete(ctx context.Context, user_id uuid.UUID) error {
-	cmdTag, err := r.db.Exec(ctx, `DELETE FROM subscriptions WHERE user_id=$1`, user_id)
+func (r *Repository) Delete(ctx context.Context, userID uuid.UUID) error {
+	queryBuilder := squirrel.Delete("subscriptions").
+		Where(squirrel.Eq{"user_id": userID}).PlaceholderFormat(squirrel.Dollar)
+
+	sqlStr, args, err := queryBuilder.ToSql()
 	if err != nil {
+		log.Printf("Update: успешно обновлена подписка для user_id=%s", userID)
+		return err
+	}
+
+	log.Printf("Delete: выполняется SQL: %s с аргументами: %v", sqlStr, args)
+
+	cmdTag, err := r.db.Exec(ctx, sqlStr, args...)
+	if err != nil {
+		log.Printf("Delete: ошибка выполнения SQL: %v", err)
 		return err
 	}
 	if cmdTag.RowsAffected() != 1 {
+		log.Printf("Delete: строк не удалено (RowsAffected=%d)", cmdTag.RowsAffected())
 		return fmt.Errorf("no rows affected")
 	}
+
+	log.Printf("Delete: успешно удалена подписка для user_id=%s", userID)
 	return nil
 }
 
+// Получение всех подписок
 func (r *Repository) GetAllSubscriptions(ctx context.Context) ([]models.Subscription, error) {
-	rows, err := r.db.Query(ctx, "SELECT id, service_name, price, user_id, start_date, end_date FROM subscriptions")
+	queryBuilder := squirrel.Select("id", "service_name", "price", "user_id", "start_date", "end_date").
+		From("subscriptions").PlaceholderFormat(squirrel.Dollar)
+
+	sqlStr, args, err := queryBuilder.ToSql()
 	if err != nil {
+		log.Printf("GetAllSubscriptions : ошибка формирования SQL :%v", err)
+		return nil, err
+	}
+
+	log.Printf("GetAllSubscriptions : выполняется SQL :%s с аргументами :%v", sqlStr, args)
+
+	rows, err := r.db.Query(ctx, sqlStr, args...)
+	if err != nil {
+		log.Printf("GetAllSubscriptions : ошибка выполнения запроса :%v", err)
 		return nil, err
 	}
 	defer rows.Close()
@@ -120,37 +165,56 @@ func (r *Repository) GetAllSubscriptions(ctx context.Context) ([]models.Subscrip
 		var s models.Subscription
 		err := rows.Scan(&s.ID, &s.ServiceName, &s.Price, &s.UserID, &s.StartDate, &s.EndDate)
 		if err != nil {
+			log.Printf("GetAllSubscriptions : ошибка сканирования строки :%v", err)
 			return nil, err
 		}
 		subs = append(subs, s)
 	}
+
+	log.Println("GetAllSubscriptions : успешно получено количество подписок:", len(subs))
 	return subs, nil
 }
 
-func (r *Repository) GetTotalSubscriptionCost(ctx context.Context, date time.Time, filterByUser bool, userID uuid.UUID, serviceName string) (int, error) {
-	query := `
-		SELECT COALESCE(SUM(price), 0)
-		FROM subscriptions
-		WHERE start_date <= TO_DATE($1, 'YYYY-MM-DD') AND end_date >= TO_DATE($1, 'YYYY-MM-DD')`
+// Подсчет стоимости подписки по указанной дате в запросе
+func (r *Repository) GetTotalSubscriptionCost(
+	ctx context.Context,
+	date time.Time,
+	filterByUser bool,
+	userID uuid.UUID,
+	serviceName string,
+) (int, error) {
 
-	var args []interface{}
-	args = append(args, date)
-
-	argPos := 2 // позиция следующего аргумента
+	queryBuilder := squirrel.Select("COALESCE(SUM(price), 0)").From("subscriptions").
+		Where(
+			squirrel.And{
+				squirrel.LtOrEq{"start_date": date},
+				squirrel.GtOrEq{"end_date": date},
+			},
+		).PlaceholderFormat(squirrel.Dollar)
 
 	if filterByUser {
-		query += " AND user_id = $" + strconv.Itoa(argPos)
-		args = append(args, userID)
-		argPos++
+		queryBuilder = queryBuilder.Where(squirrel.Eq{"user_id": userID})
 	}
 
 	if serviceName != "" {
-		query += " AND service_name = $" + strconv.Itoa(argPos)
-		args = append(args, serviceName)
+		queryBuilder = queryBuilder.Where(squirrel.Eq{"service_name": serviceName})
 	}
 
+	sqlStr, args, err := queryBuilder.ToSql()
+	if err != nil {
+		log.Printf("GetTotalSubscriptionCost : ошибка формирования SQL :%v", err)
+		return 0, err
+	}
+
+	log.Printf("GetTotalSubscriptionCost : выполняется SQL :%s с аргументами :%v", sqlStr, args)
+
 	var total int
-	err := r.db.QueryRow(ctx, query, args...).Scan(&total)
-	fmt.Println(err)
-	return total, err
+	err = r.db.QueryRow(ctx, sqlStr, args...).Scan(&total)
+	if err != nil {
+		log.Printf("GetTotalSubscriptionCost : ошибка выполнения запроса :%v", err)
+		return 0, err
+	}
+
+	log.Println("GetTotalSubscriptionCost : успешно получена сумма:", total)
+	return total, nil
 }
