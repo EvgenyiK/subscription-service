@@ -42,8 +42,6 @@ func (r *Repository) Create(ctx context.Context, sub *models.Subscription) error
 		return err
 	}
 
-	log.Printf("Create: выполняется SQL: %s с аргументами: %v", sqlStr, args)
-
 	_, err = r.db.Exec(ctx, sqlStr, args...)
 	return err
 }
@@ -59,8 +57,6 @@ func (r *Repository) GetByID(ctx context.Context, id uuid.UUID) (*models.Subscri
 		log.Printf("GetByID: ошибка формирования SQL: %v", err)
 		return nil, err
 	}
-
-	log.Printf("GetByID: выполняется SQL: %s с аргументами: %v", sqlStr, args)
 
 	var sub models.Subscription
 
@@ -78,7 +74,6 @@ func (r *Repository) GetByID(ctx context.Context, id uuid.UUID) (*models.Subscri
 		return nil, err
 	}
 
-	log.Printf("GetByID: успешно получена подписка с ID: %s", sub.ID)
 	return &sub, nil
 }
 
@@ -97,8 +92,6 @@ func (r *Repository) Update(ctx context.Context, sub *models.Subscription) error
 		return err
 	}
 
-	log.Printf("Update: выполняется SQL: %s с аргументами: %v", sqlStr, args)
-
 	cmdTag, err := r.db.Exec(ctx, sqlStr, args...)
 	if err != nil {
 		log.Printf("Update: ошибка выполнения SQL: %v", err)
@@ -109,7 +102,6 @@ func (r *Repository) Update(ctx context.Context, sub *models.Subscription) error
 		return fmt.Errorf("no rows affected")
 	}
 
-	log.Printf("Update: успешно обновлена подписка для user_id=%s", sub.UserID)
 	return nil
 }
 
@@ -124,8 +116,6 @@ func (r *Repository) Delete(ctx context.Context, userID uuid.UUID) error {
 		return err
 	}
 
-	log.Printf("Delete: выполняется SQL: %s с аргументами: %v", sqlStr, args)
-
 	cmdTag, err := r.db.Exec(ctx, sqlStr, args...)
 	if err != nil {
 		log.Printf("Delete: ошибка выполнения SQL: %v", err)
@@ -136,7 +126,6 @@ func (r *Repository) Delete(ctx context.Context, userID uuid.UUID) error {
 		return fmt.Errorf("no rows affected")
 	}
 
-	log.Printf("Delete: успешно удалена подписка для user_id=%s", userID)
 	return nil
 }
 
@@ -150,8 +139,6 @@ func (r *Repository) GetAllSubscriptions(ctx context.Context) ([]models.Subscrip
 		log.Printf("GetAllSubscriptions : ошибка формирования SQL :%v", err)
 		return nil, err
 	}
-
-	log.Printf("GetAllSubscriptions : выполняется SQL :%s с аргументами :%v", sqlStr, args)
 
 	rows, err := r.db.Query(ctx, sqlStr, args...)
 	if err != nil {
@@ -171,7 +158,6 @@ func (r *Repository) GetAllSubscriptions(ctx context.Context) ([]models.Subscrip
 		subs = append(subs, s)
 	}
 
-	log.Println("GetAllSubscriptions : успешно получено количество подписок:", len(subs))
 	return subs, nil
 }
 
@@ -206,8 +192,6 @@ func (r *Repository) GetTotalSubscriptionCost(
 		return 0, err
 	}
 
-	log.Printf("GetTotalSubscriptionCost : выполняется SQL :%s с аргументами :%v", sqlStr, args)
-
 	var total int
 	err = r.db.QueryRow(ctx, sqlStr, args...).Scan(&total)
 	if err != nil {
@@ -215,6 +199,5 @@ func (r *Repository) GetTotalSubscriptionCost(
 		return 0, err
 	}
 
-	log.Println("GetTotalSubscriptionCost : успешно получена сумма:", total)
 	return total, nil
 }
