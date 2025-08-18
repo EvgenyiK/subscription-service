@@ -130,19 +130,28 @@ func (r *Repository) Delete(ctx context.Context, userID uuid.UUID) error {
 }
 
 // Получение всех подписок
-func (r *Repository) GetAllSubscriptions(ctx context.Context) ([]models.Subscription, error) {
+func (r *Repository) GetAllSubscriptions(ctx context.Context, limit, offset int) ([]models.Subscription, error) {
 	queryBuilder := squirrel.Select("id", "service_name", "price", "user_id", "start_date", "end_date").
-		From("subscriptions").PlaceholderFormat(squirrel.Dollar)
+		From("subscriptions").
+		PlaceholderFormat(squirrel.Dollar)
+
+	// Добавляем лимит и смещение
+	if limit > 0 {
+		queryBuilder = queryBuilder.Limit(uint64(limit))
+	}
+	if offset >= 0 {
+		queryBuilder = queryBuilder.Offset(uint64(offset))
+	}
 
 	sqlStr, args, err := queryBuilder.ToSql()
 	if err != nil {
-		log.Printf("GetAllSubscriptions : ошибка формирования SQL :%v", err)
+		log.Printf("GetSubscriptions: ошибка формирования SQL: %v", err)
 		return nil, err
 	}
 
 	rows, err := r.db.Query(ctx, sqlStr, args...)
 	if err != nil {
-		log.Printf("GetAllSubscriptions : ошибка выполнения запроса :%v", err)
+		log.Printf("GetSubscriptions: ошибка выполнения запроса: %v", err)
 		return nil, err
 	}
 	defer rows.Close()
@@ -152,7 +161,7 @@ func (r *Repository) GetAllSubscriptions(ctx context.Context) ([]models.Subscrip
 		var s models.Subscription
 		err := rows.Scan(&s.ID, &s.ServiceName, &s.Price, &s.UserID, &s.StartDate, &s.EndDate)
 		if err != nil {
-			log.Printf("GetAllSubscriptions : ошибка сканирования строки :%v", err)
+			log.Printf("GetSubscriptions: ошибка сканирования строки: %v", err)
 			return nil, err
 		}
 		subs = append(subs, s)

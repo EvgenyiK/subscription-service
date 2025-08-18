@@ -9,6 +9,7 @@ import (
 	"github.com/EvgenyiK/subscription-service/internal/repository"
 	"github.com/gorilla/mux"
 	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -240,10 +241,27 @@ func (h *Handler) DeleteSubscription(w http.ResponseWriter, r *http.Request) {
 // @Produce json
 // @Success 200 {array} models.Subscription
 // @Failure 500 {object} map[string]string
-// @Router /subscriptions/view/list [get]
+// @Router /subscriptions/view/list?page&limit [get]
 func (h *Handler) ListSubscriptions(w http.ResponseWriter, r *http.Request) {
-	// Просто получаем все подписки без фильтров
-	subscriptions, err := h.repo.GetAllSubscriptions(r.Context())
+	vars := mux.Vars(r)
+
+	pageStr := vars["page"]
+	limitStr := vars["limit"]
+
+	page := 1
+	limit := 10
+
+	if p, err := strconv.Atoi(pageStr); err == nil && p > 0 {
+		page = p
+	}
+
+	if l, err := strconv.Atoi(limitStr); err == nil && l > 0 {
+		limit = l
+	}
+
+	offset := (page - 1) * limit
+
+	subscriptions, err := h.repo.GetAllSubscriptions(r.Context(), offset, limit)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Error fetching subscriptions: "+err.Error())
 		return
