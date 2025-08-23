@@ -177,9 +177,10 @@ func (r *Repository) GetTotalSubscriptionCost(
 	filterByUser bool,
 	userID uuid.UUID,
 	serviceName string,
-) (int, error) {
+) (float64, error) {
 
-	queryBuilder := squirrel.Select("COALESCE(SUM(price), 0)").From("subscriptions").
+	queryBuilder := squirrel.Select("price", "start_date", "end_date").
+		From("subscriptions").
 		Where(
 			squirrel.And{
 				squirrel.LtOrEq{"start_date": date},
@@ -201,12 +202,46 @@ func (r *Repository) GetTotalSubscriptionCost(
 		return 0, err
 	}
 
-	var total int
-	err = r.db.QueryRow(ctx, sqlStr, args...).Scan(&total)
+	rows, err := r.db.Query(ctx, sqlStr, args...)
 	if err != nil {
 		log.Printf("GetTotalSubscriptionCost : ошибка выполнения запроса :%v", err)
 		return 0, err
 	}
+	defer rows.Close()
+
+	var total float64 = 0
+	for rows.Next() {
+		var price float64
+		var startDate, endDate time.Time
+		if err := rows.Scan(&price, &startDate, &endDate); err != nil {
+			log.Printf("GetTotalSubscriptionCost: ошибка сканирования строки: %v", err)
+			return 0, err
+		}
+
+		// Определяем пересечение периода с датой
+		start := startDate
+		end := endDate
+
+		if start.Before(date) {
+			start = date
+		}
+		if end.After(date) {
+			end = date
+		}
+
+		daysActive := end.Sub(start).Hours()/24 + 1 // +1 чтобы включительно считать день
+
+		if daysActive > 0 {
+			total += price * (daysActive / float64(daysInMonth(date)))
+		}
+	}
 
 	return total, nil
+}
+
+// helper функции:
+func daysInMonth(t time.Time) int {
+	firstOfMonth := time.Date(t.Year(), t.Month(), 1, 0, 0, 0, 0, t.Location())
+	firstOfNextMonth := firstOfMonth.AddDate(0, 1, 0)
+	return int(firstOfNextMonth.Sub(firstOfMonth).Hours() / 24)
 }
