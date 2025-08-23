@@ -12,6 +12,21 @@ import (
 	"time"
 )
 
+type SubscriptionRepository interface {
+	Create(ctx context.Context, sub *models.Subscription) error
+	GetByID(ctx context.Context, id uuid.UUID) (*models.Subscription, error)
+	Update(ctx context.Context, sub *models.Subscription) error
+	Delete(ctx context.Context, userID uuid.UUID) error
+	GetAllSubscriptions(ctx context.Context, limit, offset int) ([]models.Subscription, error)
+	GetTotalSubscriptionCost(
+		ctx context.Context,
+		date time.Time,
+		filterByUser bool,
+		userID uuid.UUID,
+		serviceName string,
+	) (float64, error)
+}
+
 type Repository struct {
 	db *pgxpool.Pool
 }
@@ -245,3 +260,5 @@ func daysInMonth(t time.Time) int {
 	firstOfNextMonth := firstOfMonth.AddDate(0, 1, 0)
 	return int(firstOfNextMonth.Sub(firstOfMonth).Hours() / 24)
 }
+
+var _ SubscriptionRepository = (*Repository)(nil)

@@ -21,10 +21,10 @@ const (
 )
 
 type Handler struct {
-	repo *repository.Repository
+	repo repository.SubscriptionRepository
 }
 
-func NewHandler(repo *repository.Repository) *Handler {
+func NewHandler(repo repository.SubscriptionRepository) *Handler {
 	return &Handler{repo: repo}
 }
 
